@@ -4,28 +4,46 @@ const router = express.Router();
 const Url = require("../models/Url");
 const checkURL = require("../utils/checker");
 
+const normalizeUrl = (url) => {
+  return url
+    .trim()
+    .toLowerCase()
+    .replace(/\/$/, ""); // removes ending /
+};
+
 router.post("/check", async (req, res) => {
   const { url } = req.body;
 
+  const normalizedUrl = normalizeUrl(url);
+
   try {
-    // 1. Check DB first
-    let existing = await Url.findOne({ url });
+    let existing = await Url.findOne({ url: normalizedUrl });
 
     if (existing) {
-      return res.json({
-        source: "database",
-        ...existing._doc,
-      });
-    }
+  if (!existing.reasons || existing.reasons.length === 0) {
+    const result = checkURL(existing.url);
 
-    // 2. Run algorithm
-    const result = checkURL(url);
+    existing.reasons = result.reasons;
+    await existing.save();
+  }
 
-    // 3. Save to DB
+  return res.json({
+    source: "database",
+    url: existing.url,
+    riskScore: existing.riskScore,
+    status: existing.status,
+    reasons: existing.reasons
+  });
+}
+
+    const result = checkURL(normalizedUrl);
+    console.log("RESULT:", result);
+
     const newUrl = new Url({
-      url,
+      url: normalizedUrl,
       riskScore: result.score,
       status: result.status,
+      reasons: result.reasons
     });
 
     await newUrl.save();
